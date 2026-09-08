@@ -1,0 +1,22 @@
+# Production-Ready Web Scraper Configuration
+
+browser:
+  type: chromium
+  headless: true
+  timeout: 30000
+  viewport:
+    width: 1280
+    height: 800
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+scraper:
+  delay: 1
+  max_pages: 10
+  max_requests: 100
+
+robots:
+  respect: true
+
+output:
+  directory: output
+  format: json

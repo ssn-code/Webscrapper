@@ -1,0 +1,9 @@
+.continue/
+__pycache__/
+*.pyc
+.pytest_cache/
+WebScraper/logs/*.log
+WebScraper/logs/*.log.*
+WebScraper/output/*
+!WebScraper/output/.gitkeep
+WebScraper/output/*.png
