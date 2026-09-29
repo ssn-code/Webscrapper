@@ -1,0 +1,8 @@
+{
+  "name": "WebScraper",
+  "description": "Production-ready modular web scraper with real-time DOM extraction, headings, links, images, structured data viewer, and multi-format exports.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
