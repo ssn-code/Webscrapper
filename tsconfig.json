@@ -16,5 +16,5 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "server.ts"]
+  "include": ["src", "server.ts", "server-security.ts", "server-security.test.ts", "server-robots.ts", "server-robots.test.ts", "server-exports.ts", "server-exports.test.ts", "robots-parser.d.ts"]
 }

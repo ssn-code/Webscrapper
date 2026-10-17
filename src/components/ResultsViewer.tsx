@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Download,
   Copy,
@@ -16,8 +16,11 @@ import {
   HardDrive,
   FileJson,
   FileSpreadsheet,
+  Gauge,
+  Square,
 } from 'lucide-react';
-import { ScrapedData } from '../types.ts';
+import { LinkCheckResult, ScrapedData } from '../types.ts';
+import { auditSeo } from '../seoAudit.ts';
 
 interface ResultsViewerProps {
   data: ScrapedData;
@@ -25,6 +28,7 @@ interface ResultsViewerProps {
 
 type TabType =
   | 'overview'
+  | 'seo'
   | 'headings'
   | 'paragraphs'
   | 'links'
@@ -40,6 +44,66 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ data }) => {
   const [headingFilter, setHeadingFilter] = useState<number | 'all'>('all');
   const [paragraphSearch, setParagraphSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
+  const seoReport = auditSeo(data);
+  const [linkCheckResults, setLinkCheckResults] = useState<LinkCheckResult[] | null>(null);
+  const [linkCheckError, setLinkCheckError] = useState('');
+  const [isCheckingLinks, setIsCheckingLinks] = useState(false);
+  const linkCheckController = useRef<AbortController | null>(null);
+
+  useEffect(() => () => linkCheckController.current?.abort(), [data.id]);
+
+  const checkLinks = async () => {
+    const controller = new AbortController();
+    linkCheckController.current = controller;
+    setIsCheckingLinks(true);
+    setLinkCheckError('');
+    setLinkCheckResults(null);
+    try {
+      const response = await fetch('/api/links/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: data.id }),
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Link check failed.');
+      setLinkCheckResults(payload.results || []);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        setLinkCheckError('Link check cancelled.');
+      } else {
+        setLinkCheckError(error instanceof Error ? error.message : 'Link check failed.');
+      }
+    } finally {
+      if (linkCheckController.current === controller) linkCheckController.current = null;
+      setIsCheckingLinks(false);
+    }
+  };
+
+  const exportLinkChecks = (format: 'json' | 'csv') => {
+    if (!linkCheckResults) return;
+    const content = format === 'json'
+      ? JSON.stringify(linkCheckResults, null, 2)
+      : [
+        'URL,Anchor Text,Type,Status,Final URL,Method,Error',
+        ...linkCheckResults.map(result => [
+          result.url,
+          result.text,
+          result.isExternal ? 'external' : 'internal',
+          result.status_code ?? '',
+          result.final_url,
+          result.method,
+          result.error || '',
+        ].map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')),
+      ].join('\n');
+    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv' });
+    const downloadUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.download = `link-check-${data.id}.${format}`;
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+  };
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -88,7 +152,7 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ data }) => {
                     : 'bg-red-500/20 text-red-400 border border-red-500/30'
                 }`}
               >
-                HTTP {data.status_code || 200} OK
+                HTTP {data.status_code || 200} {(data.status_code || 200) < 400 ? 'OK' : 'Error'}
               </span>
 
               <span className="flex items-center gap-1 text-xs text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/60">
@@ -106,6 +170,19 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ data }) => {
               <span className="text-xs text-slate-500">
                 {new Date(data.timestamp).toLocaleTimeString()}
               </span>
+              {data.robots_status && (
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                  data.robots_allowed
+                    ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                    : 'text-slate-400 border-slate-700 bg-slate-800'
+                }`}>
+                  {data.robots_status === 'disabled'
+                    ? 'Robots checks disabled'
+                    : data.robots_allowed
+                      ? `Robots allowed (${data.robots_status})`
+                      : `Robots: ${data.robots_status}`}
+                </span>
+              )}
             </div>
 
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight truncate">
@@ -277,6 +354,18 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ data }) => {
         >
           <Heading className="w-4 h-4" />
           <span>Headings ({data.headings.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('seo')}
+          className={`flex items-center gap-1.5 px-3 py-3 border-b-2 transition whitespace-nowrap ${
+            activeTab === 'seo'
+              ? 'border-blue-500 text-blue-400 font-semibold'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Gauge className="w-4 h-4" />
+          <span>SEO audit</span>
         </button>
 
         <button
@@ -456,6 +545,44 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ data }) => {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'seo' && (
+          <section className="space-y-5" aria-labelledby="seo-audit-title">
+            <div className="flex flex-wrap items-center gap-5 border-b border-slate-800 pb-4">
+              <div className="min-w-24">
+                <div className="text-3xl font-bold text-white">{seoReport.score}<span className="text-base text-slate-500">/100</span></div>
+                <div className="text-xs text-slate-400">Indicative score</div>
+              </div>
+              <div className="space-y-1 text-xs text-slate-400">
+                <h2 id="seo-audit-title" className="text-sm font-semibold text-white">Page SEO inspection</h2>
+                <p>{seoReport.findings.length} checks, equally weighted: pass = 1, warning = 0.5, fail = 0.</p>
+                <p>This heuristic is not a ranking prediction and does not include private search analytics.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {seoReport.findings.map((finding) => (
+                <article key={finding.id} className="grid grid-cols-1 md:grid-cols-[140px_minmax(0,1fr)] gap-3 border-b border-slate-800/80 py-3">
+                  <div>
+                    <span className={`inline-flex text-[11px] font-semibold uppercase px-2 py-1 rounded border ${
+                      finding.status === 'pass'
+                        ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                        : finding.status === 'warning'
+                          ? 'text-amber-300 border-amber-500/30 bg-amber-500/10'
+                          : 'text-red-300 border-red-500/30 bg-red-500/10'
+                    }`}>
+                      {finding.status}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="text-sm font-medium text-slate-100">{finding.title}</h3>
+                    <p className="text-xs text-slate-400"><span className="text-slate-500">Evidence:</span> {finding.evidence}</p>
+                    <p className="text-xs text-slate-300"><span className="text-slate-500">Next step:</span> {finding.recommendation}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* HEADINGS TAB */}
@@ -641,8 +768,45 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ data }) => {
                   )}
                   <span>Copy URLs</span>
                 </button>
+                <button
+                  onClick={isCheckingLinks ? () => linkCheckController.current?.abort() : checkLinks}
+                  disabled={!isCheckingLinks && data.links.length === 0}
+                  className="flex items-center gap-1.5 rounded bg-cyan-700 px-2.5 py-1.5 text-white disabled:opacity-50"
+                >
+                  {isCheckingLinks ? <Square className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+                  {isCheckingLinks ? 'Cancel check' : 'Check links'}
+                </button>
               </div>
             </div>
+
+            {isCheckingLinks && <p role="status" className="text-xs text-cyan-300">Checking up to 25 unique links with bounded requests. You can cancel this check.</p>}
+            {linkCheckError && <p role="status" className="text-xs text-amber-300">{linkCheckError}</p>}
+            {linkCheckResults && (
+              <section className="space-y-3" aria-label="Broken link check results">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-800 py-2 text-xs">
+                  <span className="text-slate-300">Checked {linkCheckResults.length} unique destinations. HEAD is used first; some sites treat HEAD and GET differently or block automated checks.</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => exportLinkChecks('json')} className="text-blue-300 hover:text-white">Export JSON</button>
+                    <button onClick={() => exportLinkChecks('csv')} className="text-blue-300 hover:text-white">Export CSV</button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-slate-500"><tr><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">URL</th><th className="py-2 pr-3">Final URL</th><th className="py-2">Method</th></tr></thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {linkCheckResults.map((result) => (
+                        <tr key={result.url}>
+                          <td className="py-2 pr-3 text-slate-200">{result.status_code ?? result.error ?? 'Failed'}</td>
+                          <td className="max-w-xs truncate py-2 pr-3 font-mono text-slate-400">{result.url}</td>
+                          <td className="max-w-xs truncate py-2 pr-3 font-mono text-slate-400">{result.final_url}</td>
+                          <td className="py-2 text-slate-500">{result.method}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             {filteredLinks.length === 0 ? (
               <div className="text-center py-12 text-slate-500 text-xs">

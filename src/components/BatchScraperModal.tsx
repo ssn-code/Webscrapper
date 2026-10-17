@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ListPlus,
   X,
@@ -19,7 +19,7 @@ interface BatchScraperModalProps {
 
 interface BatchItem {
   url: string;
-  status: 'pending' | 'running' | 'done' | 'failed';
+  status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled' | 'skipped';
   title?: string;
   error?: string;
 }
@@ -36,16 +36,25 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
   const [queue, setQueue] = useState<BatchItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [batchError, setBatchError] = useState('');
+  const activeController = useRef<AbortController | null>(null);
+  const stopRequested = useRef(false);
 
   if (!isOpen) return null;
 
   const handleStartBatch = async () => {
-    const rawList = urlsText
+    const rawList = Array.from(new Set(urlsText
       .split('\n')
       .map((u) => u.trim())
-      .filter((u) => Boolean(u));
+      .filter((u) => Boolean(u))));
 
     if (rawList.length === 0) return;
+    if (rawList.length > 10) {
+      setBatchError('A batch can contain at most 10 unique URLs.');
+      return;
+    }
+    setBatchError('');
+    stopRequested.current = false;
 
     const initialQueue: BatchItem[] = rawList.map((url) => ({
       url,
@@ -57,7 +66,10 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
     setProgress({ current: 0, total: initialQueue.length });
 
     for (let i = 0; i < initialQueue.length; i++) {
+      if (stopRequested.current) break;
       const item = initialQueue[i];
+      const controller = new AbortController();
+      activeController.current = controller;
 
       // Update status to running
       setQueue((prev) =>
@@ -69,6 +81,7 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: item.url }),
+          signal: controller.signal,
         });
 
         if (res.ok) {
@@ -95,10 +108,14 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
         setQueue((prev) =>
           prev.map((q, idx) =>
             idx === i
-              ? { ...q, status: 'failed', error: err.message || 'Network error' }
+              ? controller.signal.aborted
+                ? { ...q, status: 'cancelled', error: 'Cancelled' }
+                : { ...q, status: 'failed', error: err.message || 'Network error' }
               : q
           )
         );
+      } finally {
+        if (activeController.current === controller) activeController.current = null;
       }
 
       setProgress({ current: i + 1, total: initialQueue.length });
@@ -106,9 +123,19 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
       await new Promise((r) => setTimeout(r, 600));
     }
 
+    if (stopRequested.current) {
+      setQueue((prev) => prev.map((item) => item.status === 'pending' ? { ...item, status: 'skipped' } : item));
+    }
     setIsRunning(false);
     onRefreshHistory();
   };
+
+  const stopBatch = () => {
+    stopRequested.current = true;
+    activeController.current?.abort();
+  };
+
+  const countStatus = (status: BatchItem['status']) => queue.filter(item => item.status === status).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
@@ -143,8 +170,9 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 font-mono text-xs outline-none focus:border-blue-500 leading-relaxed"
               />
               <span className="text-[11px] text-slate-500 mt-1 block">
-                URLs will be scraped sequentially with respectful rate-limiting delays.
+                Up to 10 unique URLs are processed sequentially; robots rules and server-side rate limits apply.
               </span>
+              {batchError && <p role="alert" className="text-red-400 mt-2">{batchError}</p>}
             </div>
           )}
 
@@ -157,6 +185,12 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
                 <span className="font-semibold text-blue-400">
                   {Math.round((progress.current / (progress.total || 1)) * 100)}%
                 </span>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                <span>Completed {countStatus('done')}</span>
+                <span>Failed {countStatus('failed')}</span>
+                <span>Skipped {countStatus('skipped')}</span>
+                <span>Pending {countStatus('pending')}</span>
               </div>
 
               {/* Progress bar */}
@@ -186,6 +220,9 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
                       {item.status === 'failed' && (
                         <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
                       )}
+                      {(item.status === 'cancelled' || item.status === 'skipped') && (
+                        <AlertTriangle className="w-4 h-4 text-slate-500 shrink-0" />
+                      )}
                       {item.status === 'pending' && (
                         <div className="w-4 h-4 rounded-full border border-slate-700 shrink-0" />
                       )}
@@ -214,6 +251,12 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
                       {item.status === 'pending' && (
                         <span className="text-[11px] text-slate-500">Queued</span>
                       )}
+                      {item.status === 'cancelled' && (
+                        <span className="text-[11px] text-slate-500">Cancelled</span>
+                      )}
+                      {item.status === 'skipped' && (
+                        <span className="text-[11px] text-slate-500">Skipped</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -240,11 +283,10 @@ export const BatchScraperModal: React.FC<BatchScraperModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
-              disabled={isRunning}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs transition disabled:opacity-50"
+              onClick={isRunning ? stopBatch : onClose}
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs transition"
             >
-              {queue.length > 0 && !isRunning ? 'Close' : 'Cancel'}
+              {isRunning ? 'Stop queue' : queue.length > 0 ? 'Close' : 'Cancel'}
             </button>
 
             {queue.length === 0 && (

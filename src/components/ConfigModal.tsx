@@ -24,8 +24,15 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => 
   });
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [adminToken, setAdminToken] = useState('');
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
+    if (!isOpen) {
+      setAdminToken('');
+      setSaveError('');
+      return;
+    }
     if (isOpen) {
       fetch('/api/config')
         .then((r) => r.json())
@@ -39,18 +46,25 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setSaveError('');
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
         body: JSON.stringify(config),
       });
       if (res.ok) {
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 2000);
+      } else {
+        const payload = await res.json().catch(() => ({ error: 'Configuration update failed.' }));
+        setSaveError(payload.error || 'Configuration update failed.');
       }
     } catch {
-      // Ignore
+      setSaveError('Could not reach the server.');
     } finally {
       setIsSaving(false);
     }
@@ -74,6 +88,21 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => 
 
         <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
           <div>
+            <label className="block text-slate-300 font-medium mb-1.5" htmlFor="config-admin-token">
+              Administrator token
+            </label>
+            <input
+              id="config-admin-token"
+              type="password"
+              autoComplete="current-password"
+              value={adminToken}
+              onChange={(e) => setAdminToken(e.target.value)}
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
             <label className="block text-slate-300 font-medium mb-1.5 flex items-center gap-1.5">
               <Laptop className="w-3.5 h-3.5 text-blue-400" />
               Default User-Agent Header
@@ -94,8 +123,8 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => 
               </label>
               <input
                 type="number"
-                min={2000}
-                max={60000}
+                min={1000}
+                max={30000}
                 step={1000}
                 value={config.timeout_ms}
                 onChange={(e) =>
@@ -147,7 +176,8 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => 
           </div>
 
           <div className="pt-4 flex items-center justify-between border-t border-slate-800">
-            {savedSuccess && (
+            {saveError && <span role="alert" className="text-red-400">{saveError}</span>}
+            {savedSuccess && !saveError && (
               <span className="text-emerald-400 flex items-center gap-1 font-medium">
                 <Check className="w-4 h-4" />
                 Config saved!
@@ -163,7 +193,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose }) => 
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || !adminToken}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-md transition"
               >
                 <Save className="w-3.5 h-3.5" />

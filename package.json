@@ -3,17 +3,23 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.9"
+  },
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx server.ts",
     "build": "vite build",
-    "start": "tsx server.ts",
-    "lint": "tsc --noEmit"
+    "start": "node --env-file-if-exists=.env --import tsx server.ts",
+    "lint": "tsc --noEmit",
+    "test": "tsx --test server-security.test.ts server-robots.test.ts server-exports.test.ts src/seoAudit.test.ts"
   },
   "dependencies": {
-    "axios": "^1.7.9",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "google-robotstxt-parser": "^1.2.0",
+    "helmet": "^8.3.0",
+    "ipaddr.js": "^2.5.0",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

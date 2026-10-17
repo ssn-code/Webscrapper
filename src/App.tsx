@@ -6,10 +6,11 @@ import { HistorySidebar } from './components/HistorySidebar.tsx';
 import { LogsModal } from './components/LogsModal.tsx';
 import { ConfigModal } from './components/ConfigModal.tsx';
 import { BatchScraperModal } from './components/BatchScraperModal.tsx';
+import { PublicInfoPage } from './components/PublicInfoPage.tsx';
 import { ScrapedData, HistoryItem } from './types.ts';
 import { Globe, ArrowRight, ShieldCheck, Database, Zap } from 'lucide-react';
 
-export const App: React.FC = () => {
+const ScraperWorkspace: React.FC = () => {
   const [currentData, setCurrentData] = useState<ScrapedData | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -187,6 +188,13 @@ export const App: React.FC = () => {
         </div>
       </main>
 
+      <footer className="mx-auto flex w-full max-w-7xl flex-wrap gap-x-5 gap-y-2 px-4 pb-6 text-xs text-slate-500 sm:px-6 lg:px-8">
+        <a href="/about" className="hover:text-slate-200">About</a>
+        <a href="/contact" className="hover:text-slate-200">Contact</a>
+        <a href="/privacy" className="hover:text-slate-200">Privacy</a>
+        <a href="/terms" className="hover:text-slate-200">Terms</a>
+      </footer>
+
       {/* Modals */}
       <LogsModal isOpen={isLogsOpen} onClose={() => setIsLogsOpen(false)} />
       <ConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />
@@ -201,6 +209,18 @@ export const App: React.FC = () => {
       />
     </div>
   );
+};
+
+export const App: React.FC = () => {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (pathname === '/') return <ScraperWorkspace />;
+  const pages: Record<string, 'about' | 'contact' | 'privacy' | 'terms'> = {
+    '/about': 'about',
+    '/contact': 'contact',
+    '/privacy': 'privacy',
+    '/terms': 'terms',
+  };
+  return <PublicInfoPage page={pages[pathname] || 'not-found'} />;
 };
 
 export default App;

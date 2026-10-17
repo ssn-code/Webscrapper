@@ -14,6 +14,24 @@ export interface ImageItem {
   alt: string;
 }
 
+export interface SeoMetadata {
+  title_tag: string;
+  description_tag: string;
+  canonical_url: string;
+  robots_directives: string;
+  viewport: string;
+  open_graph: Record<string, string>;
+  twitter: Record<string, string>;
+  language: string;
+  has_doctype: boolean;
+  has_html: boolean;
+  has_head: boolean;
+  has_body: boolean;
+  missing_alt_count: number;
+  missing_anchor_text_count: number;
+  duplicate_link_count: number;
+}
+
 export interface CustomSelectorResult {
   selector: string;
   count: number;
@@ -30,13 +48,26 @@ export interface ScrapedData {
   paragraphs: string[];
   links: LinkItem[];
   images: ImageItem[];
+  seo_metadata: SeoMetadata;
   custom_selector?: CustomSelectorResult;
   raw_html?: string | null;
   status_code: number | null;
   content_type?: string;
   content_length_bytes?: number;
+  robots_allowed?: boolean;
+  robots_status?: 'rules' | 'not-found' | 'client-error' | 'unavailable' | 'disabled';
   duration_ms: number;
   timestamp: string;
+}
+
+export interface LinkCheckResult {
+  url: string;
+  text: string;
+  isExternal: boolean;
+  status_code: number | null;
+  final_url: string;
+  method: 'HEAD' | 'GET';
+  error?: string;
 }
 
 export interface HistoryItem {

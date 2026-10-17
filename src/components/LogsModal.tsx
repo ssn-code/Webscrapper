@@ -22,33 +22,52 @@ export const LogsModal: React.FC<LogsModalProps> = ({ isOpen, onClose }) => {
   const [search, setSearch] = useState('');
   const [copied, setCopied] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [adminToken, setAdminToken] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   const fetchLogs = async () => {
+    if (!adminToken) return;
     setIsLoading(true);
     try {
-      const res = await fetch('/api/logs');
+      const res = await fetch('/api/logs', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setLogs(data);
+        setIsAuthorized(true);
+        setAuthError('');
+      } else {
+        setIsAuthorized(false);
+        const payload = await res.json().catch(() => ({ error: 'Administrator authorization failed.' }));
+        setAuthError(payload.error || 'Administrator authorization failed.');
       }
     } catch {
-      // Ignore network hiccup
+      setAuthError('Could not reach the server.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      setAdminToken('');
+      setIsAuthorized(false);
+      setLogs([]);
+      setAuthError('');
+      return;
+    }
+    if (isOpen && adminToken) {
       fetchLogs();
     }
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !autoRefresh) return;
+    if (!isOpen || !autoRefresh || !isAuthorized) return;
     const interval = setInterval(fetchLogs, 3000);
     return () => clearInterval(interval);
-  }, [isOpen, autoRefresh]);
+  }, [isOpen, autoRefresh, isAuthorized]);
 
   if (!isOpen) return null;
 
@@ -121,6 +140,36 @@ export const LogsModal: React.FC<LogsModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        {!isAuthorized ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              fetchLogs();
+            }}
+            className="p-6 space-y-3"
+          >
+            <label htmlFor="logs-admin-token" className="block text-sm text-slate-200">
+              Administrator token
+            </label>
+            <input
+              id="logs-admin-token"
+              type="password"
+              autoComplete="current-password"
+              value={adminToken}
+              onChange={(event) => setAdminToken(event.target.value)}
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono text-xs outline-none focus:border-blue-500"
+            />
+            {authError && <p role="alert" className="text-xs text-red-400">{authError}</p>}
+            <button
+              type="submit"
+              disabled={isLoading || !adminToken}
+              className="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
+            >
+              {isLoading ? 'Checking...' : 'Open logs'}
+            </button>
+          </form>
+        ) : <>
         {/* Filter bar */}
         <div className="p-3 border-b border-slate-800 bg-slate-950/60 flex flex-wrap items-center gap-3 text-xs">
           <div className="relative flex-1 min-w-[200px]">
@@ -182,6 +231,7 @@ export const LogsModal: React.FC<LogsModalProps> = ({ isOpen, onClose }) => {
             })
           )}
         </div>
+        </>}
       </div>
     </div>
   );

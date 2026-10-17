@@ -209,9 +209,9 @@ export const ScraperForm: React.FC<ScraperFormProps> = ({
               <input
                 type="number"
                 min={2}
-                max={60}
+                max={30}
                 value={timeout}
-                onChange={(e) => setTimeoutVal(Math.max(2, parseInt(e.target.value) || 10))}
+                onChange={(e) => setTimeoutVal(Math.min(30, Math.max(2, parseInt(e.target.value) || 10)))}
                 className="w-full bg-slate-950/70 border border-slate-700/80 focus:border-blue-500 text-xs sm:text-sm text-slate-200 rounded-lg px-3 py-2 outline-none"
               />
               <span className="text-[10px] text-slate-500 mt-1 block">
