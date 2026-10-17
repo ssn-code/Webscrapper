@@ -12,6 +12,8 @@ interface NavbarProps {
   onOpenConfig: () => void;
   onOpenBatch: () => void;
   historyCount: number;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,6 +21,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenConfig,
   onOpenBatch,
   historyCount,
+  theme = 'dark',
+  onToggleTheme,
 }) => {
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
@@ -52,6 +56,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </div>
+
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-medium border border-slate-700 transition"
+              title="Toggle theme"
+            >
+              <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenBatch}

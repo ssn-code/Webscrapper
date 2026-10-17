@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Navbar } from './components/Navbar.tsx';
 import { ScraperForm } from './components/ScraperForm.tsx';
 import { ResultsViewer } from './components/ResultsViewer.tsx';
@@ -7,6 +7,7 @@ import { LogsModal } from './components/LogsModal.tsx';
 import { ConfigModal } from './components/ConfigModal.tsx';
 import { BatchScraperModal } from './components/BatchScraperModal.tsx';
 import { PublicInfoPage } from './components/PublicInfoPage.tsx';
+import { LandingPage } from './components/LandingPage.tsx';
 import { ScrapedData, HistoryItem } from './types.ts';
 import { Globe, ArrowRight, ShieldCheck, Database, Zap } from 'lucide-react';
 
@@ -16,20 +17,18 @@ const ScraperWorkspace: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // Modals state
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
 
-  // Load history on mount
   const fetchHistory = async () => {
     try {
       const res = await fetch('/api/history');
       if (res.ok) {
         const data: HistoryItem[] = await res.json();
         setHistory(data);
-        // If nothing is selected yet and history exists, select first
         if (!selectedId && data.length > 0) {
           handleSelectHistory(data[0].id);
         }
@@ -123,17 +122,47 @@ const ScraperWorkspace: React.FC = () => {
     }
   };
 
+  const stats = useMemo(() => {
+    const total = history.length;
+    const successful = history.filter((item) => item.status_code !== null && item.status_code >= 200 && item.status_code < 400).length;
+    const failed = total - successful;
+    const avgDuration = total
+      ? Math.round(history.reduce((sum, item) => sum + item.duration_ms, 0) / total)
+      : 0;
+
+    return { total, successful, failed, avgDuration };
+  }, [history]);
+
+  const pageThemeClasses = theme === 'dark'
+    ? 'min-h-screen bg-slate-950 text-white'
+    : 'min-h-screen bg-slate-100 text-slate-900';
+
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+    <div className={pageThemeClasses + ' flex flex-col font-sans'}>
       <Navbar
         onOpenLogs={() => setIsLogsOpen(true)}
         onOpenConfig={() => setIsConfigOpen(true)}
         onOpenBatch={() => setIsBatchOpen(true)}
         historyCount={history.length}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Scraper Input Form */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {[
+            { label: 'Total inspected', value: String(stats.total), tone: 'cyan' },
+            { label: 'Successful', value: String(stats.successful), tone: 'emerald' },
+            { label: 'Failed', value: String(stats.failed), tone: 'rose' },
+            { label: 'Avg. duration', value: `${stats.avgDuration} ms`, tone: 'violet' },
+          ].map((item) => (
+            <div key={item.label} className={theme === 'dark' ? 'rounded-2xl border border-slate-800 bg-slate-900 p-4' : 'rounded-2xl border border-slate-200 bg-white p-4'}>
+              <p className={theme === 'dark' ? 'text-xs uppercase tracking-[0.18em] text-slate-400' : 'text-xs uppercase tracking-[0.18em] text-slate-500'}>{item.label}</p>
+              <p className="mt-3 text-2xl font-semibold text-white">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
         <ScraperForm
           onScrape={handleScrape}
           isLoading={isLoading}
@@ -141,19 +170,18 @@ const ScraperWorkspace: React.FC = () => {
           onClearError={() => setError(null)}
         />
 
-        {/* Main Content Grid: Results Viewer + Sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
           <div className="lg:col-span-3 space-y-6">
             {currentData ? (
               <ResultsViewer data={currentData} />
             ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center shadow-xl space-y-4">
+              <div className={theme === 'dark' ? 'bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center shadow-xl space-y-4' : 'bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xl space-y-4'}>
                 <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
                   <Globe className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Ready to Scrape</h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                  <h3 className={theme === 'dark' ? 'text-lg font-bold text-white' : 'text-lg font-bold text-slate-900'}>Ready to Scrape</h3>
+                  <p className={theme === 'dark' ? 'text-xs text-slate-400 max-w-md mx-auto mt-1' : 'text-xs text-slate-600 max-w-md mx-auto mt-1'}>
                     Enter any website address above or pick a quick preset to trigger real-time DOM extraction, headings analysis, link resolution, and structured JSON/CSV exports.
                   </p>
                 </div>
@@ -175,7 +203,6 @@ const ScraperWorkspace: React.FC = () => {
             )}
           </div>
 
-          {/* History Sidebar */}
           <div className="lg:col-span-1">
             <HistorySidebar
               history={history}
@@ -195,7 +222,6 @@ const ScraperWorkspace: React.FC = () => {
         <a href="/terms" className="hover:text-slate-200">Terms</a>
       </footer>
 
-      {/* Modals */}
       <LogsModal isOpen={isLogsOpen} onClose={() => setIsLogsOpen(false)} />
       <ConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />
       <BatchScraperModal
@@ -213,13 +239,19 @@ const ScraperWorkspace: React.FC = () => {
 
 export const App: React.FC = () => {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (pathname === '/') return <ScraperWorkspace />;
+
+  if (pathname === '/') return <LandingPage />;
+  if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return <ScraperWorkspace />;
+
   const pages: Record<string, 'about' | 'contact' | 'privacy' | 'terms'> = {
     '/about': 'about',
     '/contact': 'contact',
     '/privacy': 'privacy',
     '/terms': 'terms',
   };
+
+  if (pathname === '/features' || pathname === '/docs') return <LandingPage />;
+
   return <PublicInfoPage page={pages[pathname] || 'not-found'} />;
 };
 
