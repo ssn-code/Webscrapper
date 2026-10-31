@@ -1,0 +1,50 @@
+# GitLab CI/CD Pipeline Configuration for Webscrapper
+# Target Node.js version matches package.json engine constraint (>=22.9)
+
+workflow:
+  rules:
+    # Run pipelines for merge requests
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Prevent duplicate pipelines on branches with open merge requests
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # Run pipelines on branch commits
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - test
+  - build
+
+default:
+  image: node:22-bookworm-slim
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+
+# Validate TypeScript types without emit
+lint:
+  stage: test
+  script:
+    - npm run lint
+
+# Run security, robots parser, and SEO unit tests
+test:
+  stage: test
+  script:
+    - npm test
+
+# Compile production Vite assets and save as downloadable artifact
+build:
+  stage: build
+  script:
+    - npm run build
+  artifacts:
+    name: "webscraper-dist-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - dist/
+    expire_in: 7 days
